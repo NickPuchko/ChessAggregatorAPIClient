@@ -1,0 +1,6 @@
+framework module Pods_BackTest {
+  umbrella header "Pods-BackTest-umbrella.h"
+
+  export *
+  module * { export * }
+}
