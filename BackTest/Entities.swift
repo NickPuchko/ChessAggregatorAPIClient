@@ -27,14 +27,14 @@ struct User: Codable {
         sex = Sex(rawValue: userResponse.sex) ?? .male
         isOrganizer = userResponse.isOrganizer
         player = Player(latinName: userResponse.latinName,
-                fideID: userResponse.fideID,
-                classicFideRating: userResponse.classicFideRating,
-                rapidFideRating: userResponse.rapidFideRating,
-                blitzFideRating: userResponse.blitzFideRating,
-                frcID: userResponse.frcID,
-                classicFrcRating: userResponse.classicFrcRating,
-                rapidFrcRating: userResponse.rapidFrcRating,
-                blitzFrcRating: userResponse.blitzFrcRating)
+                        fideID: userResponse.fideId,
+                        classicFideRating: userResponse.classicFideRating,
+                        rapidFideRating: userResponse.rapidFideRating,
+                        blitzFideRating: userResponse.blitzFideRating,
+                        frcID: userResponse.frcId,
+                        classicFrcRating: userResponse.classicFrcRating,
+                        rapidFrcRating: userResponse.rapidFrcRating,
+                        blitzFrcRating: userResponse.blitzFrcRating)
     }
 }
 

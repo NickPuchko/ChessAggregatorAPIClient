@@ -13,6 +13,9 @@ class APIClient {
     
     private lazy var accessHeader: HTTPHeader = HTTPHeader(name: "Authorization", value: "JWT \(KeychainWrapper.standard.string(forKey: "accessToken") ?? "")")
     
+//    private lazy var refreshToken: String = KeychainWrapper.standard.string(forKey: "refreshToken") ?? ""
+
+    
     private lazy var contentTypeHeader: HTTPHeader = HTTPHeader(name: "Content-Type", value: "application/json")
     
     private lazy var encoder: JSONEncoder = {
@@ -30,7 +33,7 @@ class APIClient {
     private func makeURL(path: String) -> URL? {
         var baseComponents = URLComponents()
         baseComponents.scheme = "https"
-        baseComponents.host = "c0e68695777c.ngrok.io" // update before use
+        baseComponents.host = "a35b8b46c4af.ngrok.io" // MARK: update before use
         baseComponents.path = path
         return baseComponents.url
     }
@@ -40,12 +43,10 @@ extension APIClient {
     func createUser(user: UserReg, completion: @escaping (Result<Bool, Error>) -> Void) {
         do {
             let data = try encoder.encode(user)
-//            let credentional = URLCredential(user: email, password: password, persistence: .permanent)
             let url = makeURL(path: "/api/v1/auth/users/")!
             let headers: HTTPHeaders = [contentTypeHeader]
 
             AF.upload(data, to: url, headers: headers)
-//                .authenticate(with: credentional)
                 .responseString { response in
                 print(response.response?.statusCode as Any)
                 switch response.result {
@@ -69,7 +70,7 @@ extension APIClient {
             let data = try encoder.encode(Credential(email: email, password: password))
             let url = makeURL(path: "/api/v1/auth/jwt/create/")!
             AF.upload(data, to: url, headers: headers).responseJSON { response in
-                print(response.response?.statusCode as Any)
+
                 switch response.result {
                 case .success(let tokens):
                     if let dict = tokens as? [String: String] {
@@ -92,14 +93,13 @@ extension APIClient {
     }
 
     func refresh(completion: @escaping () -> Void) {
-
+        // TODO: alamofire retrier
     }
     
     func requestUser(completion: @escaping (Result<User, Error>) -> Void) {
         let url = makeURL(path: "/api/v1/auth/users/me/")!
         let headers: HTTPHeaders = [accessHeader, contentTypeHeader] // may require validate()
         AF.request(url, headers: headers).responseString { [weak self] response in
-            print(response.response?.statusCode as Any)
             switch response.result {
                 case .success(let json):
                     do {
@@ -157,24 +157,149 @@ extension APIClient {
     func getEvents(for status: EventStatus, completion: @escaping (Result<[Tournament], Error>) -> Void) {
         let url = makeURL(path: "/api/v1/tournaments/")!
         AF.request(url, parameters: ["status" : status.rawValue], headers: [accessHeader, contentTypeHeader]).response { [weak self] response in
-            print(response.response?.statusCode as Any)
+            guard let statusCode = response.response?.statusCode else {
+                completion(.failure(RequestError.networkError))
+                return
+            }
+            print(statusCode)
+//            switch statusCode {
+//            case 401:
+//                self?.refresh {
+//                    statusCode = 200
+//                }
+//            case 200..<300:
+                switch response.result {
+                case .success(let json):
+                    do {
+                        guard let jsonUnwrapped = json else {
+                            completion(.failure(RequestError.decodingError))
+                            return
+                        }
+                        let eventList: [TournamentGet]? = try self?.decoder.decode([TournamentGet].self, from: jsonUnwrapped)
+                        guard let eventsUnwrapped = eventList else {
+                            completion(.failure(RequestError.decodingError))
+                            return
+                        }
+                        let events: [Tournament] = eventsUnwrapped.map { event in
+                            Tournament(eventResponse: event)
+                        }
+                        completion(.success(events))
+                    } catch let error {
+                        print("Event list decoding error occurred: \(error)")
+                    }
+                case .failure(let error):
+                    print("Get events request error: \(error)")
+                    completion(.failure(error))
+                }
+//            default:
+//                completion(.failure(RequestError.networkError))
+//            }
+
+        }
+    }
+}
+
+extension APIClient {
+    func getParticipants(id: Int, completion: @escaping (Result<[Participant], Error>) -> Void) {
+        guard let url = makeURL(path: "/api/v1/tournaments/\(id)/participants/") else {
+            completion(.failure(RequestError.urlError))
+            return
+        }
+        
+        AF.request(url, headers: [accessHeader, contentTypeHeader]).response { [weak self] response in
             switch response.result {
             case .success(let json):
+                guard let jsonUnwrapped = json else {
+                    completion(.failure(RequestError.networkError))
+                    return
+                }
                 do {
-                    let eventList: [TournamentGet] = try self!.decoder.decode([TournamentGet].self, from: json!)
-                    let events: [Tournament] = eventList.map { event in
-                        Tournament(eventResponse: event)
+                    let participantsGet: [Participant]? = (try self?.decoder.decode([Participant].self, from: jsonUnwrapped))
+                    guard let participants = participantsGet else {
+                        completion(.failure(RequestError.decodingError))
+                        return
                     }
-                    completion(.success(events))
+                    completion(.success(participants))
                 } catch let error {
-                    print("Event list decoding error occurred: \(error)")
+                    completion(.failure(error))
                 }
             case .failure(let error):
-                print("Get events request error: \(error)")
                 completion(.failure(error))
             }
         }
     }
+    
+    func updateParticipantStatus(eventID: Int, participantID: Int, status: ParticipantStatus, completion: @escaping (Result<Participant, Error>) -> Void) {
+        guard let url = makeURL(path: "/api/v1/tournaments/\(eventID)/participants/\(participantID)/") else {
+            completion(.failure(RequestError.urlError))
+            return
+        }
+        do {
+            let patch = try self.encoder.encode(["status" : status.rawValue])
+            AF.upload(patch,
+                      to: url,
+                      method: .patch,
+                      headers: [accessHeader, contentTypeHeader])
+                .response { [weak self] response in
+                switch response.result {
+                case .success(let json):
+                    guard let jsonUnwrapped = json else {
+                        completion(.failure(RequestError.networkError))
+                        return
+                    }
+                    do {
+                        guard let updatedParticipant = try self?.decoder.decode(Participant.self, from: jsonUnwrapped) else {
+                            completion(.failure(RequestError.decodingError))
+                            return
+                        }
+                        completion(.success(updatedParticipant))
+                    } catch let error {
+                        completion(.failure(error))
+                    }
+                case .failure(let error):
+                    completion(.failure(error))
+                }
+            }
+        } catch let error {
+            completion(.failure(error))
+            return
+        }
+    }
+    
+    func addParticipant(eventID: Int, user: UserGet, completion: @escaping (Result<Participant, Error>) -> Void) {
+        //TODO: manual addition
+    }
+    
+    func addParticipant(eventID: Int, completion: @escaping (Result<Participant, Error>) -> Void) {
+        guard let url = makeURL(path: "/api/v1/tournaments/\(eventID)/participants/") else {
+            completion(.failure(RequestError.urlError))
+            return
+        }
+        AF.request(url,
+                   method: .post,
+                   headers: [accessHeader, contentTypeHeader])
+            .response { [weak self] response in
+                switch response.result {
+                case .success(let data):
+                    guard let json = data else {
+                        completion(.failure(RequestError.networkError))
+                        return
+                    }
+                    do {
+                        guard let participant = try self?.decoder.decode(Participant.self, from: json) else {
+                            completion(.failure(RequestError.decodingError))
+                            return
+                        }
+                        completion(.success(participant))
+                    } catch let error {
+                        completion(.failure(error))
+                    }
+                case .failure(let error):
+                    completion(.failure(error))
+                }
+            }
+    }
 }
+
 
 

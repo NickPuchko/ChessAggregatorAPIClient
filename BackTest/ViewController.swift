@@ -19,20 +19,14 @@ class ViewController: UIViewController {
     let userReg: UserReg = UserReg(email: "mail1@gmail.com",
             surname: "Doe", name: "John", patronymic: nil,
             sex: "Мужчина", birthdate: "1970-01-01", latinName: "Doe John",
-            fideID: 24176214, frcID: 1606, isOrganizer: true, password: "KekShrek123")
+            fideId: 24176214, frcId: 1606, isOrganizer: true, password: "KekShrek123")
     
 
-    //KeychainWrapper.standard.string(forKey: "accessToken")!
 
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .white
 
-
-//        apiClient.createUser(user: userReg) { result in
-//            print(result)
-//        }
         let queue = DispatchQueue(label: "NetworkQueue", qos: .utility)
         let group = DispatchGroup()
         group.enter()
@@ -51,7 +45,21 @@ class ViewController: UIViewController {
             self!.apiClient.getEvents(for: .forthcoming) { result in
                 switch result {
                 case .success(let events):
-                    print(events)
+                    let event = events.first!
+                    self?.apiClient.getParticipants(id: event.id, completion: { (result) in
+                        print(result)
+                    })
+//                    self?.apiClient.addParticipant(eventID: event.id, completion: { (result) in
+//                        print(result)
+//                    })
+//                    self?.apiClient.getParticipants(id: event.id) { (result) in
+//                        switch result {
+//                        case .success(let participants):
+//                            print(participants)
+//                        case .failure(let error):
+//                            print(error)
+//                        }
+//                    }
                 case .failure(let error):
                     print("Some get events error occurred: \(error)")
                 }
