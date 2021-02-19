@@ -20,8 +20,8 @@ struct UserReg: Codable {
     var sex: String
     var birthdate: String
     var latinName: String?
-    var fideID: Int?
-    var frcID: Int?
+    var fideId: Int?
+    var frcId: Int?
     var isOrganizer: Bool
     var password: String
 // No need in init(User) yet
@@ -48,11 +48,11 @@ struct UserGet: Codable {
     var sex: String
     var birthdate: String
     var latinName: String?
-    var fideID: Int?
+    var fideId: Int?
     var classicFideRating: Int?
     var rapidFideRating: Int?
     var blitzFideRating: Int?
-    var frcID: Int?
+    var frcId: Int?
     var classicFrcRating: Int?
     var rapidFrcRating: Int?
     var blitzFrcRating: Int?
@@ -65,12 +65,15 @@ struct UserEdit: Codable {
     var patronymic: String?
     var latinName: String?
     var sex: String
-    var fideID: Int?
-    var frcID: Int?
+    var fideId: Int?
+    var frcId: Int?
     var isOrganizer: Bool
 }
 
-//TODO: UserList
+struct Participant: Codable {
+    var player: UserGet
+    var status: ParticipantStatus
+}
 
 struct TournamentReg: Codable {
     var name: String
@@ -107,7 +110,9 @@ struct TournamentGet: Codable {
     var increment: Int
 }
 
-struct TournamentList: Codable {
-    var events: [TournamentGet]
+enum RequestError: Error {
+    case urlError
+    case decodingError
+    case encodingError
+    case networkError
 }
-// TODO: EventList
