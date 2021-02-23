@@ -60,14 +60,14 @@ struct UserGet: Codable {
 }
 
 struct UserEdit: Codable {
-    var surname: String
-    var name: String
+    var surname: String?
+    var name: String?
     var patronymic: String?
     var latinName: String?
-    var sex: String
+    var sex: String?
     var fideId: Int?
     var frcId: Int?
-    var isOrganizer: Bool
+    var isOrganizer: Bool?
 }
 
 struct Participant: Codable {
@@ -115,4 +115,5 @@ enum RequestError: Error {
     case decodingError
     case encodingError
     case networkError
+    case keychainError
 }
