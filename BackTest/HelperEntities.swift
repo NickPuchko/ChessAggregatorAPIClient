@@ -13,7 +13,13 @@ class DateStringer {
 }
 
 struct UserReg: Codable {
+    var profile: Profile
     var email: String
+    var isOrganizer: Bool
+    var password: String
+}
+
+struct Profile: Codable {
     var surname: String
     var name: String
     var patronymic: String?
@@ -22,40 +28,18 @@ struct UserReg: Codable {
     var latinName: String?
     var fideId: Int?
     var frcId: Int?
-    var isOrganizer: Bool
-    var password: String
-// No need in init(User) yet
-//    init(user: User, password thisPassword: String) {
-//        email = user.email
-//        surname = user.surname
-//        name = user.name
-//        patronymic = user.patronymic
-//        birthdate = DateStringer.shared.string(from: user.birthdate)
-//        sex = user.sex.rawValue
-//        latinName = user.player.latinName
-//        fideID = user.player.fideID
-//        frcID = user.player.frcID
-//        isOrganizer = user.isOrganizer
-//        password = thisPassword
-//    }
-}
-
-struct UserGet: Codable {
-    var id: Int
-    var surname: String
-    var name: String
-    var patronymic: String?
-    var sex: String
-    var birthdate: String
-    var latinName: String?
-    var fideId: Int?
     var classicFideRating: Int?
     var rapidFideRating: Int?
     var blitzFideRating: Int?
-    var frcId: Int?
     var classicFrcRating: Int?
     var rapidFrcRating: Int?
     var blitzFrcRating: Int?
+}
+
+struct UserGet: Codable {
+    var profile: Profile
+    var email: String
+    var id: Int
     var isOrganizer: Bool
 }
 
@@ -71,8 +55,20 @@ struct UserEdit: Codable {
 }
 
 struct Participant: Codable {
-    var player: UserGet
+    var player: UserGet // player -> profile
     var status: ParticipantStatus
+}
+
+struct ManualParicipant: Codable {
+    var email: String?
+    var surname: String
+    var name: String
+    var patronymic: String?
+    var sex: String
+    var birthdate: String?
+    var latinName: String?
+    var fideId: Int?
+    var frcId: Int?
 }
 
 struct TournamentReg: Codable {
@@ -111,9 +107,11 @@ struct TournamentGet: Codable {
 }
 
 enum RequestError: Error {
-    case urlError
-    case decodingError
-    case encodingError
-    case networkError
-    case keychainError
+    case url
+    case decoding
+    case encoding
+    case network
+    case keychain
+    case emailInUse
+    case serverInternal
 }

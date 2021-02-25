@@ -20,21 +20,21 @@ struct User: Codable {
 
     init(userResponse: UserGet) {
         id = userResponse.id
-        surname = userResponse.surname
-        name = userResponse.name
-        patronymic = userResponse.patronymic
-        birthdate = DateStringer.shared.date(from: "userResponse.birthdate") ?? Date()
-        sex = Sex(rawValue: userResponse.sex) ?? .male
+        surname = userResponse.profile.surname
+        name = userResponse.profile.name
+        patronymic = userResponse.profile.patronymic
+        birthdate = DateStringer.shared.date(from: userResponse.profile.birthdate) ?? Date()
+        sex = Sex(rawValue: userResponse.profile.sex) ?? .male
         isOrganizer = userResponse.isOrganizer
-        player = Player(latinName: userResponse.latinName,
-                        fideID: userResponse.fideId,
-                        classicFideRating: userResponse.classicFideRating,
-                        rapidFideRating: userResponse.rapidFideRating,
-                        blitzFideRating: userResponse.blitzFideRating,
-                        frcID: userResponse.frcId,
-                        classicFrcRating: userResponse.classicFrcRating,
-                        rapidFrcRating: userResponse.rapidFrcRating,
-                        blitzFrcRating: userResponse.blitzFrcRating)
+        player = Player(latinName: userResponse.profile.latinName,
+                        fideID: userResponse.profile.fideId,
+                        classicFideRating: userResponse.profile.classicFideRating,
+                        rapidFideRating: userResponse.profile.rapidFideRating,
+                        blitzFideRating: userResponse.profile.blitzFideRating,
+                        frcID: userResponse.profile.frcId,
+                        classicFrcRating: userResponse.profile.classicFrcRating,
+                        rapidFrcRating: userResponse.profile.rapidFrcRating,
+                        blitzFrcRating: userResponse.profile.blitzFrcRating)
     }
 }
 
