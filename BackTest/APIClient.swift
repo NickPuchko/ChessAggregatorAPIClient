@@ -42,7 +42,7 @@ class APIClient {
 extension APIClient {
     func createUser(user: UserReg, completion: @escaping (Result<UserGet, Error>) -> Void) {
         guard let url = makeURL(path: "/api/v1/auth/users/") else {
-            completion(.failure(RequestError.urlError))
+            completion(.failure(RequestError.url))
             return
         }
         do {
@@ -53,21 +53,35 @@ extension APIClient {
                 .response { [weak self] response in
                 switch response.result {
                 case .success(let json):
-                    guard let jsonUnwrapped = json else {
-                        completion(.failure(RequestError.networkError))
+                    guard let status = response.response?.statusCode,
+                          let jsonUnwrapped = json else {
+                        completion(.failure(RequestError.network))
                         return
                     }
-                    do {
-                        guard let userGet = try self?.decoder.decode(UserGet.self, from: jsonUnwrapped) else {
-                            completion(.failure(RequestError.decodingError))
-                            return
+                    print(status)
+                    switch status {
+                    case 400:
+                        completion(.failure(RequestError.emailInUse))
+                        return
+                    case 500..<600:
+                        completion(.failure(RequestError.serverInternal))
+                        return
+                    case 201:
+                        do {
+                            guard let userGet = try self?.decoder.decode(UserGet.self, from: jsonUnwrapped) else {
+                                completion(.failure(RequestError.decoding))
+                                return
+                            }
+                            completion(.success(userGet))
+                        } catch let error {
+                            completion(.failure(error))
                         }
-                        completion(.success(userGet))
-                    } catch let error {
-                        completion(.failure(error))
+                    default:
+                        completion(.failure(RequestError.network))
                     }
+                    
                 case .failure(let error):
-                    print("User creation request error: \(error)")
+                    completion(.failure(error))
                 }
             }
         }
@@ -78,7 +92,7 @@ extension APIClient {
     
     func editUser(user: User, newuser: UserEdit, completion: @escaping (Result<UserGet, Error>) -> Void) {
         guard let url = makeURL(path: "/api/v1/auth/users/\(user.id)/") else {
-            completion(.failure(RequestError.urlError))
+            completion(.failure(RequestError.url))
             return
         }
         do {
@@ -91,12 +105,12 @@ extension APIClient {
                     switch response.result {
                     case .success(let json):
                         guard let jsonUnwrapped = json else {
-                            completion(.failure(RequestError.networkError))
+                            completion(.failure(RequestError.network))
                             return
                         }
                         do {
                             guard let editedUser = try self?.decoder.decode(UserGet.self, from: jsonUnwrapped) else {
-                                completion(.failure(RequestError.decodingError))
+                                completion(.failure(RequestError.decoding))
                                 return
                             }
                             completion(.success(editedUser))
@@ -114,44 +128,52 @@ extension APIClient {
     
     // TODO: fix response & url
     func signIn(email: String, password: String, completion: @escaping (Result<Bool, Error>) -> Void) {
+        guard let url = makeURL(path: "/api/v1/auth/jwt/create/") else {
+            completion(.failure(RequestError.url))
+            return
+        }
+        
         do {
             let headers: HTTPHeaders = [contentTypeHeader]
             let data = try encoder.encode(Credential(email: email, password: password))
-            let url = makeURL(path: "/api/v1/auth/jwt/create/")!
             AF.upload(data,
                       to: url,
                       headers: headers)
                 .responseJSON { response in
                 switch response.result {
                 case .success(let tokens):
-                    if let dict = tokens as? [String: String] {
-                        if let access = dict["access"],
-                           let refresh = dict["refresh"] {
-                            let savingResult = KeychainWrapper.standard.set(access, forKey: "accessToken")
-                                && KeychainWrapper.standard.set(refresh, forKey: "refreshToken")
-                            completion(.success(savingResult))
-                        }
-                    } else {
-                        print("Tokens decoding error")
+                    guard let dict = tokens as? [String: String] else {
+                        completion(.failure(RequestError.network))
+                        return
                     }
+                    guard let access = dict["access"],
+                          let refresh = dict["refresh"] else {
+                        completion(.failure(RequestError.decoding))
+                        return
+                    }
+                    let savingResult = KeychainWrapper.standard.set(access, forKey: "accessToken")
+                            && KeychainWrapper.standard.set(refresh, forKey: "refreshToken")
+                    completion(.success(savingResult))
+                    return
                 case .failure(let error):
-                    print("Signing request error: \(error)")
+                    completion(.failure(error))
+                    return
                 }
             }
         } catch let error {
-            print("Credential encoding error: \(error)")
+            completion(.failure(error))
         }
     }
 
     func refresh(completion: @escaping (Result<Bool, Error>) -> Void) {
         // TODO: alamofire retrier
         guard let url = makeURL(path: "/api/v1/auth/jwt/refresh/") else {
-            completion(.failure(RequestError.urlError))
+            completion(.failure(RequestError.url))
             return
         }
         do {
             guard let accessToken = KeychainWrapper.standard.string(forKey: "accessToken") else {
-                completion(.failure(RequestError.keychainError))
+                completion(.failure(RequestError.keychain))
                 return
             }
             let access = try encoder.encode(accessToken)
@@ -163,7 +185,7 @@ extension APIClient {
                 case .success(let json):
                     guard let tokenDict = json as? [String: String],
                           let access = tokenDict["access"] else {
-                        completion(.failure(RequestError.decodingError))
+                        completion(.failure(RequestError.decoding))
                         return
                     }
                     completion(.success(KeychainWrapper.standard.set(access, forKey: "accessToken")))
@@ -179,7 +201,7 @@ extension APIClient {
     
     func requestUser(completion: @escaping (Result<User, Error>) -> Void) {
         guard let url = makeURL(path: "/api/v1/auth/users/me/") else {
-            completion(.failure(RequestError.urlError))
+            completion(.failure(RequestError.url))
             return
         }
         let headers: HTTPHeaders = [accessHeader, contentTypeHeader] // may require validate()
@@ -190,92 +212,115 @@ extension APIClient {
                 case .success(let json):
                     do {
                         guard let jsonUnwrapped = json else {
-                            completion(.failure(RequestError.networkError))
+                            completion(.failure(RequestError.network))
                             return
                         }
+
                         guard let parsedUser = try self?.decoder.decode(UserGet.self, from: jsonUnwrapped) else {
-                            completion(.failure(RequestError.decodingError))
+                            completion(.failure(RequestError.decoding))
                             return
                         }
                         completion(.success(User(userResponse: parsedUser)))
                     } catch let error {
-                        print("User decoding error: \(error)")
+                        completion(.failure(error))
                     }
                 case .failure(let error):
-                    print("User request error: \(error)")
+                    completion(.failure(error))
                 }
             }
     }
     
     // TODO: fix response
-    func requestUser(id: Int, completion: @escaping (Result<UserReg, Error>) -> Void) {
+    func requestUser(id: Int, completion: @escaping (Result<UserGet, Error>) -> Void) {
         guard let url = makeURL(path: "/api/v1/auth/users/\(id)/") else {
-            completion(.failure(RequestError.urlError))
+            completion(.failure(RequestError.url))
             return
         }
         AF.request(url,
-                   headers: [accessHeader])
-            .validate(contentType: ["application/json"])
-            .responseString { [weak self] response in
-                print(response.response?.statusCode as Any)
+                   headers: [accessHeader, contentTypeHeader])
+            .response { [weak self] response in
                 switch response.result {
                 case .success(let json):
-                    let parsedUser = try! self?.decoder.decode(UserReg.self, from: json.data(using: .utf16)!)
-                    completion(.success(parsedUser!))
+                    do {
+                        guard let jsonUnwrapped = json else {
+                            completion(.failure(RequestError.network))
+                            return
+                        }
+                        guard let parsedUser = try self?.decoder.decode(UserGet.self, from: jsonUnwrapped) else {
+                            completion(.failure(RequestError.decoding))
+                            return
+                        }
+                        completion(.success(parsedUser))
+                    } catch let error {
+                        completion(.failure(error))
+                    }
                 case .failure(let error):
-                    print(error.localizedDescription)
+                    completion(.failure(error))
                 }
             }
     }
 }
 
 extension APIClient {
-    func createEvent(event: TournamentReg) {
+    func createEvent(event: TournamentReg, completion: @escaping (Result<TournamentGet, Error>) -> Void) {
         do {
             let data = try encoder.encode(event)
             guard let url = makeURL(path: "/api/v1/tournaments/") else {
-//                completion(.failure(RequestError.urlError))
-                // TODO: completion handler
+                completion(.failure(RequestError.url))
                 return
             }
-            let headers: HTTPHeaders = [accessHeader, contentTypeHeader]
             
             AF.upload(data,
                       to: url,
-                      headers: headers)
+                      headers: [accessHeader, contentTypeHeader])
                 .response { [weak self] response in
                 switch response.result {
-                case .success(let json):
-                    let parsedEvent = try! self?.decoder.decode(TournamentGet.self, from: json!)
-                    print(Tournament(eventResponse: parsedEvent!))
+                case .success(let data):
+                    guard let json = data else {
+                        completion(.failure(RequestError.network))
+                        return
+                    }
+                    do {
+                        guard let parsedEvent = try self?.decoder.decode(TournamentGet.self, from: json) else {
+                            completion(.failure(RequestError.decoding))
+                            return
+                        }
+                        completion(.success(parsedEvent))
+                    } catch let error {
+                        completion(.failure(error))
+                    }
                 case .failure(let error):
-                    print(error.localizedDescription)
+                    completion(.failure(error))
                 }
             }
         } catch let error {
-            print("Event encoding error: \(error)")
+            completion(.failure(error))
         }
     }
     
-    func getEvents(for status: EventStatus, completion: @escaping (Result<[Tournament], Error>) -> Void) {
+    func getEvents(status: EventStatus? = nil, completion: @escaping (Result<[Tournament], Error>) -> Void) {
         guard let url = makeURL(path: "/api/v1/tournaments/") else {
-            completion(.failure(RequestError.urlError))
+            completion(.failure(RequestError.url))
             return
         }
+        var parameters: Parameters?
+        if let status = status {
+            parameters = ["status" : status.rawValue]
+        }
         AF.request(url,
-                   parameters: ["status" : status.rawValue],
+                   parameters: parameters,
                    headers: [accessHeader, contentTypeHeader])
             .response { [weak self] response in
             switch response.result {
             case .success(let json):
                 do {
                     guard let jsonUnwrapped = json else {
-                        completion(.failure(RequestError.decodingError))
+                        completion(.failure(RequestError.decoding))
                         return
                     }
                     let eventList: [TournamentGet]? = try self?.decoder.decode([TournamentGet].self, from: jsonUnwrapped)
                     guard let eventsUnwrapped = eventList else {
-                        completion(.failure(RequestError.decodingError))
+                        completion(.failure(RequestError.decoding))
                         return
                     }
                     let events: [Tournament] = eventsUnwrapped.map { event in
@@ -283,10 +328,9 @@ extension APIClient {
                     }
                     completion(.success(events))
                 } catch let error {
-                    print("Event list decoding error occurred: \(error)")
+                    completion(.failure(error))
                 }
             case .failure(let error):
-                print("Get events request error: \(error)")
                 completion(.failure(error))
             }
 
@@ -298,7 +342,7 @@ extension APIClient {
 extension APIClient {
     func getParticipants(id: Int, completion: @escaping (Result<[Participant], Error>) -> Void) {
         guard let url = makeURL(path: "/api/v1/tournaments/\(id)/participants/") else {
-            completion(.failure(RequestError.urlError))
+            completion(.failure(RequestError.url))
             return
         }
         
@@ -308,13 +352,13 @@ extension APIClient {
             switch response.result {
             case .success(let json):
                 guard let jsonUnwrapped = json else {
-                    completion(.failure(RequestError.networkError))
+                    completion(.failure(RequestError.network))
                     return
                 }
                 do {
                     let participantsGet: [Participant]? = (try self?.decoder.decode([Participant].self, from: jsonUnwrapped))
                     guard let participants = participantsGet else {
-                        completion(.failure(RequestError.decodingError))
+                        completion(.failure(RequestError.decoding))
                         return
                     }
                     completion(.success(participants))
@@ -329,7 +373,7 @@ extension APIClient {
     
     func updateParticipantStatus(eventID: Int, participantID: Int, status: ParticipantStatus, completion: @escaping (Result<Participant, Error>) -> Void) {
         guard let url = makeURL(path: "/api/v1/tournaments/\(eventID)/participants/\(participantID)/") else {
-            completion(.failure(RequestError.urlError))
+            completion(.failure(RequestError.url))
             return
         }
         do {
@@ -342,12 +386,12 @@ extension APIClient {
                 switch response.result {
                 case .success(let json):
                     guard let jsonUnwrapped = json else {
-                        completion(.failure(RequestError.networkError))
+                        completion(.failure(RequestError.network))
                         return
                     }
                     do {
                         guard let updatedParticipant = try self?.decoder.decode(Participant.self, from: jsonUnwrapped) else {
-                            completion(.failure(RequestError.decodingError))
+                            completion(.failure(RequestError.decoding))
                             return
                         }
                         completion(.success(updatedParticipant))
@@ -364,13 +408,47 @@ extension APIClient {
         }
     }
     
-    func addParticipant(eventID: Int, user: UserGet, completion: @escaping (Result<Participant, Error>) -> Void) {
-        //TODO: manual addition
+    func addParticipant(eventID: Int, participant: ManualParicipant, completion: @escaping (Result<Participant, Error>) -> Void) {
+        guard let url = makeURL(path: "/api/v1/tournaments/\(eventID)/anonymous_participants/") else {
+            completion(.failure(RequestError.network))
+            return
+        }
+        do {
+            let data = try encoder.encode(participant)
+            AF.upload(data,
+                      to: url,
+                      method: .post,
+                      headers: [accessHeader, contentTypeHeader])
+                .response { [weak self] response in
+                    switch response.result {
+                    case .success(let data):
+                        do {
+                            guard let json = data else {
+                                completion(.failure(RequestError.network))
+                                return
+                            }
+                            guard let player = try self?.decoder.decode(Participant.self, from: json) else {
+                                completion(.failure(RequestError.decoding))
+                                return
+                            }
+                            completion(.success(player))
+                        } catch let error {
+                            completion(.failure(error))
+                            return
+                        }
+                    case .failure(let error):
+                        completion(.failure(error))
+                        return
+                    }
+                }
+        } catch let error {
+            completion(.failure(error))
+        }
     }
     
     func addParticipant(eventID: Int, completion: @escaping (Result<Participant, Error>) -> Void) {
         guard let url = makeURL(path: "/api/v1/tournaments/\(eventID)/participants/") else {
-            completion(.failure(RequestError.urlError))
+            completion(.failure(RequestError.url))
             return
         }
         AF.request(url,
@@ -380,12 +458,12 @@ extension APIClient {
                 switch response.result {
                 case .success(let data):
                     guard let json = data else {
-                        completion(.failure(RequestError.networkError))
+                        completion(.failure(RequestError.network))
                         return
                     }
                     do {
                         guard let participant = try self?.decoder.decode(Participant.self, from: json) else {
-                            completion(.failure(RequestError.decodingError))
+                            completion(.failure(RequestError.decoding))
                             return
                         }
                         completion(.success(participant))
