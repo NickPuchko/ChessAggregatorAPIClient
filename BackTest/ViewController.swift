@@ -34,8 +34,6 @@ class ViewController: UIViewController {
             semaphore.signal()
         }
         
-        view.backgroundColor = #colorLiteral(red: 0.5843137503, green: 0.8235294223, blue: 0.4196078479, alpha: 1)
-        
 //        let queue = DispatchQueue(label: "NetworkQueue", qos: .utility)
 //        let group = DispatchGroup()
 //        group.enter()

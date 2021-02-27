@@ -356,8 +356,7 @@ extension APIClient {
                     return
                 }
                 do {
-                    let participantsGet: [Participant]? = (try self?.decoder.decode([Participant].self, from: jsonUnwrapped))
-                    guard let participants = participantsGet else {
+                    guard let participants = (try self?.decoder.decode([Participant].self, from: jsonUnwrapped)) else {
                         completion(.failure(RequestError.decoding))
                         return
                     }
