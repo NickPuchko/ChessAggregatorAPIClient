@@ -9,7 +9,14 @@ import Foundation
 import Alamofire
 import SwiftKeychainWrapper
 
+
+protocol RefreshToken: RequestInterceptor {
+    
+    func refresh(completion: @escaping (Result<Bool, Error>) -> Void)
+}
 class APIClient {
+    
+    
     
     private lazy var accessHeader: HTTPHeader = HTTPHeader(name: "Authorization", value: "JWT \(KeychainWrapper.standard.string(forKey: "accessToken") ?? "")")
     
@@ -165,39 +172,39 @@ extension APIClient {
         }
     }
 
-    func refresh(completion: @escaping (Result<Bool, Error>) -> Void) {
-        // TODO: alamofire retrier
-        guard let url = makeURL(path: "/api/v1/auth/jwt/refresh/") else {
-            completion(.failure(RequestError.url))
-            return
-        }
-        do {
-            guard let accessToken = KeychainWrapper.standard.string(forKey: "accessToken") else {
-                completion(.failure(RequestError.keychain))
-                return
-            }
-            let access = try encoder.encode(accessToken)
-            AF.upload(access,
-                      to: url,
-                      headers: [contentTypeHeader])
-                .responseJSON { response in
-                switch response.result {
-                case .success(let json):
-                    guard let tokenDict = json as? [String: String],
-                          let access = tokenDict["access"] else {
-                        completion(.failure(RequestError.decoding))
-                        return
-                    }
-                    completion(.success(KeychainWrapper.standard.set(access, forKey: "accessToken")))
-                case .failure(let error):
-                    completion(.failure(error))
-                }
-            }
-        } catch let error {
-            completion(.failure(error))
-            return
-        }
-    }
+//    func refresh(completion: @escaping (Result<Bool, Error>) -> Void) {
+//        // TODO: alamofire retrier
+//        guard let url = makeURL(path: "/api/v1/auth/jwt/refresh/") else {
+//            completion(.failure(RequestError.url))
+//            return
+//        }
+//        do {
+//            guard let accessToken = KeychainWrapper.standard.string(forKey: "accessToken") else {
+//                completion(.failure(RequestError.keychain))
+//                return
+//            }
+//            let access = try encoder.encode(accessToken)
+//            AF.upload(access,
+//                      to: url,
+//                      headers: [contentTypeHeader])
+//                .responseJSON { response in
+//                switch response.result {
+//                case .success(let json):
+//                    guard let tokenDict = json as? [String: String],
+//                          let access = tokenDict["access"] else {
+//                        completion(.failure(RequestError.decoding))
+//                        return
+//                    }
+//                    completion(.success(KeychainWrapper.standard.set(access, forKey: "accessToken")))
+//                case .failure(let error):
+//                    completion(.failure(error))
+//                }
+//            }
+//        } catch let error {
+//            completion(.failure(error))
+//            return
+//        }
+//    }
     
     func requestUser(completion: @escaping (Result<User, Error>) -> Void) {
         guard let url = makeURL(path: "/api/v1/auth/users/me/") else {
@@ -475,4 +482,78 @@ extension APIClient {
                 }
             }
     }
+}
+extension APIClient: RefreshToken{
+//    func refreshToken(completion: @escaping (Bool) -> Void) {
+//
+//        AF.request("http://127.0.0.1:8000/api/v1/auth/jwt/refresh/", parameters: parameters, encoding: JSONEncoding.default).responseJSON { response in
+//            if let data = response.data, let token = (try? JSONSerialization.jsonObject(with: data, options: [])
+//                as? [String: Any])?["access"] as? String {
+//                KeychainWrapper.standard.set(token, forKey: "accessToken")
+//                print("\nRefresh token completed successfully. New token is: (token)\n")
+//                completion(true)
+//            } else {
+//                completion(false)
+//            }
+//        }
+//    }
+    func refresh(completion: @escaping (Result<Bool, Error>) -> Void) {
+        // TODO: alamofire retrier
+        guard let url = makeURL(path: "/api/v1/auth/jwt/refresh/") else {
+            completion(.failure(RequestError.url))
+            return
+        }
+        do {
+            guard let accessToken = KeychainWrapper.standard.string(forKey: "accessToken") else {
+                completion(.failure(RequestError.keychain))
+                return
+            }
+            let access = try encoder.encode(accessToken)
+            AF.upload(access,
+                      to: url,
+                      headers: [contentTypeHeader])
+                .responseJSON { response in
+                switch response.result {
+                case .success(let json):
+                    guard let tokenDict = json as? [String: String],
+                          let access = tokenDict["access"] else {
+                        completion(.failure(RequestError.decoding))
+                        return
+                    }
+                    completion(.success(KeychainWrapper.standard.set(access, forKey: "accessToken")))
+                case .failure(let error):
+                    completion(.failure(error))
+                }
+            }
+        } catch let error {
+            completion(.failure(error))
+            return
+        }
+    }
+
+    func adapt( urlRequest: URLRequest, for session: Session, completion: @escaping (Result<URLRequest, Error>) -> Void) {
+
+        guard ((urlRequest.url?.absoluteString.hasSuffix("/refresh/")) != nil) else {
+            return completion(.failure(RequestError.network))
+        }
+
+        var request = urlRequest
+        request.headers.update(accessHeader)
+        completion(.success(request))
+
+    }
+
+    func retry( request: Request, for session: Session, dueTo error: Error, completion: @escaping (RetryResult) -> Void) {
+        guard let response = request.task?.response as? HTTPURLResponse, response.statusCode == 401 else {
+
+                    return completion(.doNotRetryWithError(error))
+        }
+        refresh { result in
+            switch result{
+            case .success(_): return completion(.retry)
+            case .failure(_): return completion(.doNotRetry)
+            }
+        }
+    }
+
 }
