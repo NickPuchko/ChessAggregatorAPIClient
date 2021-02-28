@@ -10,20 +10,23 @@ import Alamofire
 import SwiftKeychainWrapper
 
 
-protocol RefreshToken: RequestInterceptor {
-    
-    func refresh(completion: @escaping (Result<Bool, Error>) -> Void)
-}
-class APIClient {
-    
-    
-    
-    private lazy var accessHeader: HTTPHeader = HTTPHeader(name: "Authorization", value: "JWT \(KeychainWrapper.standard.string(forKey: "accessToken") ?? "")")
-    
-//    private lazy var refreshToken: String = KeychainWrapper.standard.string(forKey: "refreshToken") ?? ""
 
+class APIClient {
+    var request: Alamofire.Request?
     
-    private lazy var contentTypeHeader: HTTPHeader = HTTPHeader(name: "Content-Type", value: "application/json")
+    private lazy var sessionManager: Session = {
+        var config = URLSessionConfiguration.af.default
+        config.timeoutIntervalForRequest = 30
+        return Session(configuration: config, interceptor: self)
+    }()
+    
+    private var accessHeader: HTTPHeader {
+        HTTPHeader(name: "Authorization", value: "JWT \(KeychainWrapper.standard.string(forKey: "accessToken") ?? "")")
+    }
+        
+    private let contentTypeHeader: HTTPHeader = HTTPHeader(name: "Content-Type", value: "application/json")
+    
+    private let retryLimit: Int = 1
     
     private lazy var encoder: JSONEncoder = {
         var result = JSONEncoder()
@@ -52,20 +55,35 @@ extension APIClient {
             completion(.failure(RequestError.url))
             return
         }
+        
         do {
             let data = try encoder.encode(user)
-            AF.upload(data,
-                      to: url,
-                      headers: [contentTypeHeader])
+            request?.cancel()
+            request = sessionManager.upload(data,
+                      to: url)
+                .validate()
                 .response { [weak self] response in
                 switch response.result {
                 case .success(let json):
-                    guard let status = response.response?.statusCode,
-                          let jsonUnwrapped = json else {
+                    guard let jsonUnwrapped = json else {
                         completion(.failure(RequestError.network))
                         return
                     }
-                    print(status)
+                    
+                    do {
+                        guard let userGet = try self?.decoder.decode(UserGet.self, from: jsonUnwrapped) else {
+                            completion(.failure(RequestError.decoding))
+                            return
+                        }
+                        completion(.success(userGet))
+                    } catch let error {
+                        completion(.failure(error))
+                    }
+                case .failure(let error):
+                    guard let status = response.response?.statusCode else {
+                        completion(.failure(error))
+                        return
+                    }
                     switch status {
                     case 400:
                         completion(.failure(RequestError.emailInUse))
@@ -73,22 +91,10 @@ extension APIClient {
                     case 500..<600:
                         completion(.failure(RequestError.serverInternal))
                         return
-                    case 201:
-                        do {
-                            guard let userGet = try self?.decoder.decode(UserGet.self, from: jsonUnwrapped) else {
-                                completion(.failure(RequestError.decoding))
-                                return
-                            }
-                            completion(.success(userGet))
-                        } catch let error {
-                            completion(.failure(error))
-                        }
                     default:
-                        completion(.failure(RequestError.network))
+                        completion(.failure(error))
+                        return
                     }
-                    
-                case .failure(let error):
-                    completion(.failure(error))
                 }
             }
         }
@@ -104,10 +110,11 @@ extension APIClient {
         }
         do {
             let patch = try encoder.encode(newuser)
-            AF.upload(patch,
+            request?.cancel()
+            request = sessionManager.upload(patch,
                       to: url,
-                      method: .patch,
-                      headers: [accessHeader, contentTypeHeader])
+                      method: .patch)
+                .validate()
                 .response { [weak self] response in
                     switch response.result {
                     case .success(let json):
@@ -141,11 +148,10 @@ extension APIClient {
         }
         
         do {
-            let headers: HTTPHeaders = [contentTypeHeader]
             let data = try encoder.encode(Credential(email: email, password: password))
-            AF.upload(data,
-                      to: url,
-                      headers: headers)
+            request?.cancel()
+            request = sessionManager.upload(data, to: url)
+                .validate()
                 .responseJSON { response in
                 switch response.result {
                 case .success(let tokens):
@@ -171,49 +177,15 @@ extension APIClient {
             completion(.failure(error))
         }
     }
-
-//    func refresh(completion: @escaping (Result<Bool, Error>) -> Void) {
-//        // TODO: alamofire retrier
-//        guard let url = makeURL(path: "/api/v1/auth/jwt/refresh/") else {
-//            completion(.failure(RequestError.url))
-//            return
-//        }
-//        do {
-//            guard let accessToken = KeychainWrapper.standard.string(forKey: "accessToken") else {
-//                completion(.failure(RequestError.keychain))
-//                return
-//            }
-//            let access = try encoder.encode(accessToken)
-//            AF.upload(access,
-//                      to: url,
-//                      headers: [contentTypeHeader])
-//                .responseJSON { response in
-//                switch response.result {
-//                case .success(let json):
-//                    guard let tokenDict = json as? [String: String],
-//                          let access = tokenDict["access"] else {
-//                        completion(.failure(RequestError.decoding))
-//                        return
-//                    }
-//                    completion(.success(KeychainWrapper.standard.set(access, forKey: "accessToken")))
-//                case .failure(let error):
-//                    completion(.failure(error))
-//                }
-//            }
-//        } catch let error {
-//            completion(.failure(error))
-//            return
-//        }
-//    }
     
     func requestUser(completion: @escaping (Result<User, Error>) -> Void) {
         guard let url = makeURL(path: "/api/v1/auth/users/me/") else {
             completion(.failure(RequestError.url))
             return
         }
-        let headers: HTTPHeaders = [accessHeader, contentTypeHeader] // may require validate()
-        AF.request(url,
-                   headers: headers)
+        request?.cancel()
+        request = sessionManager.request(url)
+            .validate()
             .response { [weak self] response in
             switch response.result {
                 case .success(let json):
@@ -243,8 +215,9 @@ extension APIClient {
             completion(.failure(RequestError.url))
             return
         }
-        AF.request(url,
-                   headers: [accessHeader, contentTypeHeader])
+        request?.cancel()
+        request = sessionManager.request(url)
+            .validate()
             .response { [weak self] response in
                 switch response.result {
                 case .success(let json):
@@ -276,10 +249,9 @@ extension APIClient {
                 completion(.failure(RequestError.url))
                 return
             }
-            
-            AF.upload(data,
-                      to: url,
-                      headers: [accessHeader, contentTypeHeader])
+            request?.cancel()
+            request = sessionManager.upload(data, to: url)
+                .validate()
                 .response { [weak self] response in
                 switch response.result {
                 case .success(let data):
@@ -304,6 +276,7 @@ extension APIClient {
             completion(.failure(error))
         }
     }
+
     
     func getEvents(status: EventStatus? = nil, completion: @escaping (Result<[Tournament], Error>) -> Void) {
         guard let url = makeURL(path: "/api/v1/tournaments/") else {
@@ -314,9 +287,10 @@ extension APIClient {
         if let status = status {
             parameters = ["status" : status.rawValue]
         }
-        AF.request(url,
-                   parameters: parameters,
-                   headers: [accessHeader, contentTypeHeader])
+        
+        request?.cancel()
+        request = sessionManager.request(url, parameters: parameters)
+            .validate()
             .response { [weak self] response in
             switch response.result {
             case .success(let json):
@@ -325,6 +299,7 @@ extension APIClient {
                         completion(.failure(RequestError.decoding))
                         return
                     }
+                
                     let eventList: [TournamentGet]? = try self?.decoder.decode([TournamentGet].self, from: jsonUnwrapped)
                     guard let eventsUnwrapped = eventList else {
                         completion(.failure(RequestError.decoding))
@@ -340,8 +315,6 @@ extension APIClient {
             case .failure(let error):
                 completion(.failure(error))
             }
-
-
         }
     }
 }
@@ -353,8 +326,8 @@ extension APIClient {
             return
         }
         
-        AF.request(url,
-                   headers: [accessHeader, contentTypeHeader])
+        request?.cancel()
+        request = sessionManager.request(url)
             .response { [weak self] response in
             switch response.result {
             case .success(let json):
@@ -384,10 +357,9 @@ extension APIClient {
         }
         do {
             let patch = try self.encoder.encode(["status" : status.rawValue])
-            AF.upload(patch,
-                      to: url,
-                      method: .patch,
-                      headers: [accessHeader, contentTypeHeader])
+            request?.cancel()
+            request = sessionManager.upload(patch, to: url, method: .patch)
+                .validate()
                 .response { [weak self] response in
                 switch response.result {
                 case .success(let json):
@@ -421,10 +393,9 @@ extension APIClient {
         }
         do {
             let data = try encoder.encode(participant)
-            AF.upload(data,
-                      to: url,
-                      method: .post,
-                      headers: [accessHeader, contentTypeHeader])
+            request?.cancel()
+            request = sessionManager.upload(data, to: url)
+                .validate()
                 .response { [weak self] response in
                     switch response.result {
                     case .success(let data):
@@ -457,10 +428,12 @@ extension APIClient {
             completion(.failure(RequestError.url))
             return
         }
-        AF.request(url,
-                   method: .post,
-                   headers: [accessHeader, contentTypeHeader])
+
+        request?.cancel()
+        request = sessionManager.request(url, method: .post)
+            .validate()
             .response { [weak self] response in
+
                 switch response.result {
                 case .success(let data):
                     guard let json = data else {
@@ -482,35 +455,21 @@ extension APIClient {
             }
     }
 }
-extension APIClient: RefreshToken{
-//    func refreshToken(completion: @escaping (Bool) -> Void) {
-//
-//        AF.request("http://127.0.0.1:8000/api/v1/auth/jwt/refresh/", parameters: parameters, encoding: JSONEncoding.default).responseJSON { response in
-//            if let data = response.data, let token = (try? JSONSerialization.jsonObject(with: data, options: [])
-//                as? [String: Any])?["access"] as? String {
-//                KeychainWrapper.standard.set(token, forKey: "accessToken")
-//                print("\nRefresh token completed successfully. New token is: (token)\n")
-//                completion(true)
-//            } else {
-//                completion(false)
-//            }
-//        }
-//    }
-    func refresh(completion: @escaping (Result<Bool, Error>) -> Void) {
-        // TODO: alamofire retrier
+
+
+extension APIClient: RequestInterceptor {
+    func refreshToken(completion: @escaping (Result<Bool, Error>) -> Void) {
         guard let url = makeURL(path: "/api/v1/auth/jwt/refresh/") else {
             completion(.failure(RequestError.url))
             return
         }
         do {
-            guard let accessToken = KeychainWrapper.standard.string(forKey: "accessToken") else {
+            guard let refreshToken = KeychainWrapper.standard.string(forKey: "refreshToken") else {
                 completion(.failure(RequestError.keychain))
                 return
             }
-            let access = try encoder.encode(accessToken)
-            AF.upload(access,
-                      to: url,
-                      headers: [contentTypeHeader])
+            let refresh = try encoder.encode(["refresh" : refreshToken])
+            sessionManager.upload(refresh, to: url)
                 .responseJSON { response in
                 switch response.result {
                 case .success(let json):
@@ -530,29 +489,28 @@ extension APIClient: RefreshToken{
         }
     }
 
-    func adapt( urlRequest: URLRequest, for session: Session, completion: @escaping (Result<URLRequest, Error>) -> Void) {
-
-        guard ((urlRequest.url?.absoluteString.hasSuffix("/refresh/")) != nil) else {
-            return completion(.failure(RequestError.network))
-        }
-
+    func adapt(_ urlRequest: URLRequest, for session: Session, completion: @escaping (Result<URLRequest, Error>) -> Void) {
         var request = urlRequest
-        request.headers.update(accessHeader)
+        if request.url?.absoluteString.hasSuffix("/refresh/") == false {
+            request.headers.update(accessHeader)
+        }
+        request.headers.update(contentTypeHeader)
         completion(.success(request))
-
     }
 
-    func retry( request: Request, for session: Session, dueTo error: Error, completion: @escaping (RetryResult) -> Void) {
-        guard let response = request.task?.response as? HTTPURLResponse, response.statusCode == 401 else {
-
-                    return completion(.doNotRetryWithError(error))
+    func retry(_ request: Request, for session: Session, dueTo error: Error, completion: @escaping (RetryResult) -> Void) {
+        guard request.retryCount < retryLimit else {
+            completion(.doNotRetry)
+            return
         }
-        refresh { result in
-            switch result{
-            case .success(_): return completion(.retry)
-            case .failure(_): return completion(.doNotRetry)
+
+        refreshToken { result in
+            switch result {
+            case .success(_):
+                return completion(.retry)
+            case .failure(_):
+                return completion(.doNotRetry) // TODO: do not retry - sign in
             }
         }
     }
-
 }
