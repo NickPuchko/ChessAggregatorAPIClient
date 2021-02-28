@@ -20,13 +20,7 @@ class APIClient {
         return Session(configuration: config, interceptor: self)
     }()
     
-    private var accessHeader: HTTPHeader {
-        HTTPHeader(name: "Authorization", value: "JWT \(KeychainWrapper.standard.string(forKey: "accessToken") ?? "")")
-    }
-        
-    private let contentTypeHeader: HTTPHeader = HTTPHeader(name: "Content-Type", value: "application/json")
-    
-    private let retryLimit: Int = 1
+    private let retryLimit: Int = 3
     
     private lazy var encoder: JSONEncoder = {
         var result = JSONEncoder()
@@ -492,8 +486,10 @@ extension APIClient: RequestInterceptor {
     func adapt(_ urlRequest: URLRequest, for session: Session, completion: @escaping (Result<URLRequest, Error>) -> Void) {
         var request = urlRequest
         if request.url?.absoluteString.hasSuffix("/refresh/") == false {
+            let accessHeader = HTTPHeader(name: "Authorization", value: "JWT \(KeychainWrapper.standard.string(forKey: "accessToken") ?? "")")
             request.headers.update(accessHeader)
         }
+        let contentTypeHeader = HTTPHeader(name: "Content-Type", value: "application/json")
         request.headers.update(contentTypeHeader)
         completion(.success(request))
     }
