@@ -1,6 +1,5 @@
 # Uncomment the next line to define a global platform for your project
-# platform :ios, '9.0'
-platform :ios, '10.0'
+platform :ios, '14.0'
 
 target 'BackTest' do
   # Comment the next line if you don't want to use dynamic frameworks
@@ -8,6 +7,5 @@ target 'BackTest' do
 
   pod 'Alamofire'
   pod 'SwiftKeychainWrapper'
-
 
 end

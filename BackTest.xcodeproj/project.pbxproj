@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AAE8886726814549005062BF /* Podfile in Resources */ = {isa = PBXBuildFile; fileRef = AAE8886626814549005062BF /* Podfile */; };
 		C35D3C2925C3684200A4651C /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C35D3C2825C3684200A4651C /* AppDelegate.swift */; };
 		C35D3C2B25C3684200A4651C /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C35D3C2A25C3684200A4651C /* SceneDelegate.swift */; };
 		C35D3C2D25C3684200A4651C /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C35D3C2C25C3684200A4651C /* ViewController.swift */; };
@@ -23,6 +24,7 @@
 		2C59E76F0CACEF1FA64C58BF /* Pods-BackTest.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-BackTest.debug.xcconfig"; path = "Target Support Files/Pods-BackTest/Pods-BackTest.debug.xcconfig"; sourceTree = "<group>"; };
 		3B5028F256214F2AB04AE5F9 /* Pods_BackTest.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_BackTest.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		7AB4D3577BFE4D3B7D786194 /* Pods-BackTest.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-BackTest.release.xcconfig"; path = "Target Support Files/Pods-BackTest/Pods-BackTest.release.xcconfig"; sourceTree = "<group>"; };
+		AAE8886626814549005062BF /* Podfile */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = Podfile; sourceTree = "<group>"; };
 		C35D3C2525C3684200A4651C /* BackTest.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BackTest.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C35D3C2825C3684200A4651C /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		C35D3C2A25C3684200A4651C /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
@@ -51,6 +53,7 @@
 		C35D3C1C25C3684200A4651C = {
 			isa = PBXGroup;
 			children = (
+				AAE8886626814549005062BF /* Podfile */,
 				C35D3C2725C3684200A4651C /* BackTest */,
 				C35D3C2625C3684200A4651C /* Products */,
 				F2E10988AA25759CDA57E8A8 /* Pods */,
@@ -161,6 +164,7 @@
 			files = (
 				C35D3C3525C3684300A4651C /* LaunchScreen.storyboard in Resources */,
 				C35D3C3225C3684300A4651C /* Assets.xcassets in Resources */,
+				AAE8886726814549005062BF /* Podfile in Resources */,
 				C35D3C3025C3684200A4651C /* Main.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -370,6 +374,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 9P2Q9LCYN9;
 				INFOPLIST_FILE = BackTest/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -390,6 +395,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 9P2Q9LCYN9;
 				INFOPLIST_FILE = BackTest/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

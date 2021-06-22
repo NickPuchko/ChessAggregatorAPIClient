@@ -203,7 +203,6 @@ extension APIClient {
             }
     }
     
-    // TODO: fix response
     func requestUser(id: Int, completion: @escaping (Result<UserGet, Error>) -> Void) {
         guard let url = makeURL(path: "/api/v1/auth/users/\(id)/") else {
             completion(.failure(RequestError.url))
@@ -452,7 +451,7 @@ extension APIClient {
 
 
 extension APIClient: RequestInterceptor {
-    func refreshToken(completion: @escaping (Result<Bool, Error>) -> Void) {
+    private func refreshToken(completion: @escaping (Result<Bool, Error>) -> Void) {
         guard let url = makeURL(path: "/api/v1/auth/jwt/refresh/") else {
             completion(.failure(RequestError.url))
             return
@@ -483,18 +482,20 @@ extension APIClient: RequestInterceptor {
         }
     }
 
-    func adapt(_ urlRequest: URLRequest, for session: Session, completion: @escaping (Result<URLRequest, Error>) -> Void) {
+	func adapt(_ urlRequest: URLRequest, for session: Session, completion: @escaping (Result<URLRequest, Error>) -> Void) {
         var request = urlRequest
-        if request.url?.absoluteString.hasSuffix("/refresh/") == false {
-            let accessHeader = HTTPHeader(name: "Authorization", value: "JWT \(KeychainWrapper.standard.string(forKey: "accessToken") ?? "")")
-            request.headers.update(accessHeader)
+        if request.url?.absoluteString.hasSuffix("/refresh/") == false,
+		   let jwt = KeychainWrapper.standard.string(forKey: "accessToken") {
+            let accessHeader = HTTPHeader(name: "Authorization", value: "JWT \(jwt)")
+            request.headers.add(accessHeader)
         }
         let contentTypeHeader = HTTPHeader(name: "Content-Type", value: "application/json")
-        request.headers.update(contentTypeHeader)
+        request.headers.add(contentTypeHeader)
+		debugPrint(request)
         completion(.success(request))
     }
 
-    func retry(_ request: Request, for session: Session, dueTo error: Error, completion: @escaping (RetryResult) -> Void) {
+	func retry(_ request: Request, for session: Session, dueTo error: Error, completion: @escaping (RetryResult) -> Void) {
         guard request.retryCount < retryLimit else {
             completion(.doNotRetry)
             return
